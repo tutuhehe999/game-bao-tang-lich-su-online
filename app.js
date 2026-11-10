@@ -1659,7 +1659,11 @@ function pick(cx, cy, maxDist) {
 }
 let infoOpen = false, target = null;
 function openInfo(ex) {
-  infoOpen = true; for (const k in keys) keys[k] = false;
+  infoOpen = true;
+  if (document.pointerLockElement) {
+  document.exitPointerLock();
+  }
+  for (const k in keys) keys[k] = false;
   const img = $("info-img");
   const src = ex.photo || (ex.img ? "images/" + ex.img + ".jpeg" : "");
   if (src) { img.src = src; img.alt = ex.title; img.hidden = false; } else { img.hidden = true; img.removeAttribute("src"); }
@@ -1690,27 +1694,110 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
-let drag = null;
-canvas.addEventListener("pointerdown", (e) => {
-  if (!started || infoOpen) return;
-  if (document.activeElement && document.activeElement.tagName === "INPUT") document.activeElement.blur();
-  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() };
-  canvas.setPointerCapture(e.pointerId);
+// let drag = null;
+// canvas.addEventListener("pointerdown", (e) => {
+//   if (!started || infoOpen) return;
+//   if (document.activeElement && document.activeElement.tagName === "INPUT") document.activeElement.blur();
+//   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() };
+//   canvas.setPointerCapture(e.pointerId);
+// });
+// canvas.addEventListener("pointermove", (e) => {
+//   if (!drag || drag.id !== e.pointerId) return;
+//   const k = e.pointerType === "touch" ? 0.006 : 0.0042;
+//   player.yaw -= (e.clientX - drag.x) * k;
+//   player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - (e.clientY - drag.y) * k));
+//   drag.x = e.clientX; drag.y = e.clientY;
+// });
+// canvas.addEventListener("pointerup", (e) => {
+//   if (!drag || drag.id !== e.pointerId) return;
+//   const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy), dt = performance.now() - drag.t;
+//   drag = null;
+//   if (moved < 8 && dt < 400) { const hit = pick(e.clientX, e.clientY, 8); if (hit) openInfo(hit); }
+// });
+// canvas.addEventListener("pointercancel", () => { drag = null; });
+  
+// Desktop: khóa chuột và xoay camera theo hướng di chuyển chuột
+canvas.addEventListener("click", () => {
+  if (!started || infoOpen || isTouch) return;
+
+  if (document.pointerLockElement !== canvas) {
+    canvas.requestPointerLock();
+  }
 });
-canvas.addEventListener("pointermove", (e) => {
-  if (!drag || drag.id !== e.pointerId) return;
-  const k = e.pointerType === "touch" ? 0.006 : 0.0042;
-  player.yaw -= (e.clientX - drag.x) * k;
-  player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - (e.clientY - drag.y) * k));
-  drag.x = e.clientX; drag.y = e.clientY;
+
+// Xoay camera khi chuột đã được khóa
+document.addEventListener("mousemove", (e) => {
+  if (
+    document.pointerLockElement !== canvas ||
+    !started ||
+    infoOpen
+  ) return;
+
+  const sensitivity = 0.002;
+
+  player.yaw -= e.movementX * sensitivity;
+  player.pitch -= e.movementY * sensitivity;
+
+  player.pitch = Math.max(
+    -1.2,
+    Math.min(1.2, player.pitch)
+  );
 });
-canvas.addEventListener("pointerup", (e) => {
-  if (!drag || drag.id !== e.pointerId) return;
-  const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy), dt = performance.now() - drag.t;
-  drag = null;
-  if (moved < 8 && dt < 400) { const hit = pick(e.clientX, e.clientY, 8); if (hit) openInfo(hit); }
-});
-canvas.addEventListener("pointercancel", () => { drag = null; });
+
+// Mobile: vẫn giữ thao tác chạm và kéo để xoay camera
+let touchDrag = null;
+
+if (isTouch) {
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!started || infoOpen) return;
+
+    touchDrag = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      sx: e.clientX,
+      sy: e.clientY,
+      t: performance.now()
+    };
+
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    if (!touchDrag || touchDrag.id !== e.pointerId) return;
+
+    const dx = e.clientX - touchDrag.x;
+    const dy = e.clientY - touchDrag.y;
+
+    player.yaw -= dx * 0.006;
+    player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - dy * 0.006));
+
+    touchDrag.x = e.clientX;
+    touchDrag.y = e.clientY;
+  });
+
+  canvas.addEventListener("pointerup", (e) => {
+    if (!touchDrag || touchDrag.id !== e.pointerId) return;
+
+    const moved = Math.hypot(
+      e.clientX - touchDrag.sx,
+      e.clientY - touchDrag.sy
+    );
+
+    const dt = performance.now() - touchDrag.t;
+    touchDrag = null;
+
+    if (moved < 8 && dt < 400) {
+      const hit = pick(e.clientX, e.clientY, 8);
+      if (hit) openInfo(hit);
+    }
+  });
+
+  canvas.addEventListener("pointercancel", () => {
+    touchDrag = null;
+  });
+}
+
 
 let joyX = 0, joyY = 0, joyId = null;
 const joy = $("joy"), knob = $("knob");
